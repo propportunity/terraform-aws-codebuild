@@ -2,53 +2,42 @@ data "aws_caller_identity" "default" {}
 
 data "aws_region" "default" {}
 
-resource "aws_s3_bucket" "cache_bucket" {
+module "cache_bucket" {
   #bridgecrew:skip=BC_AWS_S3_13:Skipping `Enable S3 Bucket Logging` check until bridgecrew will support dynamic blocks (https://github.com/bridgecrewio/checkov/issues/776).
   #bridgecrew:skip=BC_AWS_S3_14:Skipping `Ensure all data stored in the S3 bucket is securely encrypted at rest` check until bridgecrew will support dynamic blocks (https://github.com/bridgecrewio/checkov/issues/776).
   #bridgecrew:skip=CKV_AWS_52:Skipping `Ensure S3 bucket has MFA delete enabled` due to issue in terraform (https://github.com/hashicorp/terraform-provider-aws/issues/629).
-  count         = module.this.enabled && local.create_s3_cache_bucket ? 1 : 0
-  bucket        = local.cache_bucket_name_normalised
-  acl           = "private"
-  force_destroy = true
-  tags          = module.this.tags
+  source  = "cloudposse/s3-bucket/aws"
+  version = "2.0.3"
 
-  versioning {
-    enabled = var.versioning_enabled
-  }
+  count       = module.this.enabled && local.create_s3_cache_bucket ? 1 : 0
+  bucket_name = local.cache_bucket_name_normalised
 
-  dynamic "logging" {
-    for_each = var.access_log_bucket_name != "" ? [1] : []
-    content {
-      target_bucket = var.access_log_bucket_name
-      target_prefix = "logs/${module.this.id}/"
-    }
-  }
-
-  lifecycle_rule {
-    id      = "codebuildcache"
-    enabled = true
-
-    prefix = "/"
-    tags   = module.this.tags
-
-    expiration {
-      days = var.cache_expiration_days
-    }
-  }
-
-  dynamic "server_side_encryption_configuration" {
-    for_each = var.encryption_enabled ? ["true"] : []
-
-    content {
-      rule {
-        apply_server_side_encryption_by_default {
-          sse_algorithm = "AES256"
-        }
+  force_destroy      = true
+  tags               = module.this.tags
+  versioning_enabled = var.versioning_enabled
+  logging = var.access_log_bucket_name != "" ? {
+    bucket_name = var.access_log_bucket_name
+    prefix      = "logs/${module.this.id}/"
+  } : null
+  lifecycle_configuration_rules = [
+    # Be sure to cover https://github.com/cloudposse/terraform-aws-s3-bucket/issues/137
+    {
+      enabled                                = true
+      id                                     = "codebuildcache"
+      abort_incomplete_multipart_upload_days = 1
+      tags                                   = module.this.tags
+      filter_and                             = {}
+      noncurrent_version_expiration          = {}
+      noncurrent_version_transition          = []
+      transition                             = [{}]
+      expiration = {
+        days                         = var.cache_expiration_days
+        expired_object_delete_marker = null
       }
     }
-  }
+  ]
+  bucket_key_enabled = var.encryption_enabled
 }
-
 resource "random_string" "bucket_prefix" {
   count   = module.this.enabled ? 1 : 0
   length  = 12
@@ -71,7 +60,7 @@ locals {
 
   s3_cache_enabled       = var.cache_type == "S3"
   create_s3_cache_bucket = local.s3_cache_enabled && var.s3_cache_bucket_name == null
-  s3_bucket_name         = local.create_s3_cache_bucket ? join("", aws_s3_bucket.cache_bucket.*.bucket) : var.s3_cache_bucket_name
+  s3_bucket_name         = local.create_s3_cache_bucket ? join("", module.cache_bucket.*.bucket_id) : var.s3_cache_bucket_name
 
   ## This is the magic where a map of a list of maps is generated
   ## and used to conditionally add the cache bucket option to the
@@ -265,8 +254,8 @@ data "aws_iam_policy_document" "permissions_cache_bucket" {
     effect = "Allow"
 
     resources = [
-      join("", aws_s3_bucket.cache_bucket.*.arn),
-      "${join("", aws_s3_bucket.cache_bucket.*.arn)}/*",
+      join("", module.cache_bucket.*.bucket_arn),
+      "${join("", module.cache_bucket.*.bucket_arn)}/*",
     ]
   }
 }
@@ -325,7 +314,7 @@ resource "aws_codebuild_project" "default" {
       type                = "S3"
       location            = var.secondary_artifact_location
       artifact_identifier = var.secondary_artifact_identifier
-      encryption_disabled = ! var.secondary_artifact_encryption_enabled
+      encryption_disabled = !var.secondary_artifact_encryption_enabled
       # According to AWS documention, in order to have the artifacts written
       # to the root of the bucket, the 'namespace_type' should be 'NONE'
       # (which is the default), 'name' should be '/', and 'path' should be
@@ -430,15 +419,15 @@ resource "aws_codebuild_project" "default" {
   dynamic "secondary_sources" {
     for_each = var.secondary_sources
     content {
-      git_clone_depth     = secondary_sources.value.git_clone_depth
-      location            = secondary_sources.value.location
-      source_identifier   = secondary_sources.value.source_identifier
-      type                = secondary_sources.value.type
-      insecure_ssl        = secondary_sources.value.insecure_ssl
-      report_build_status = secondary_sources.value.report_build_status
+      git_clone_depth     = secondary_source.value.git_clone_depth
+      location            = secondary_source.value.location
+      source_identifier   = secondary_source.value.source_identifier
+      type                = secondary_source.value.type
+      insecure_ssl        = secondary_source.value.insecure_ssl
+      report_build_status = secondary_source.value.report_build_status
 
       git_submodules_config {
-        fetch_submodules = secondary_sources.value.fetch_submodules
+        fetch_submodules = secondary_source.value.fetch_submodules
       }
     }
   }
