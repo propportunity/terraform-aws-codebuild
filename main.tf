@@ -98,7 +98,7 @@ data "aws_iam_policy_document" "role" {
     sid = ""
 
     actions = [
-      "sts:AssumeRole",
+      "sts:AssumeRole"
     ]
 
     principals {
@@ -140,7 +140,6 @@ data "aws_iam_policy_document" "permissions" {
 
     actions = compact(concat([
       "codecommit:GitPull",
-      "ecr:BatchCheckLayerAvailability",
       "ecr:CompleteLayerUpload",
       "ecr:GetAuthorizationToken",
       "ecr:InitiateLayerUpload",
@@ -196,7 +195,7 @@ data "aws_iam_policy_document" "vpc_permissions" {
       "ec2:DeleteNetworkInterface",
       "ec2:DescribeSubnets",
       "ec2:DescribeSecurityGroups",
-      "ec2:DescribeVpcs"
+      "ec2:DescribeVpcs",
     ]
 
     resources = [
@@ -280,6 +279,7 @@ resource "aws_codebuild_source_credential" "authorization" {
   user_name   = var.source_credential_user_name
 }
 
+
 resource "aws_codebuild_project" "default" {
   count                  = module.this.enabled ? 1 : 0
   name                   = module.this.id
@@ -300,6 +300,20 @@ resource "aws_codebuild_project" "default" {
   artifacts {
     type     = var.artifact_type
     location = var.artifact_location
+  }
+
+  
+  dynamic "build_batch_config" {
+     for_each = var.concurrent_build_limit == 1 ? [] : [1]
+      content {
+        combine_artifacts = "true"
+        service_role      = join("", aws_iam_role.default.*.arn)
+        timeout_in_mins   = 20
+        restrictions {
+          # compute_types_allowed = ["BUILD_GENERAL1_SMALL"]
+          maximum_builds_allowed = 100
+        }
+      }
   }
 
   # Since the output type is restricted to S3 by the provider (this appears to
