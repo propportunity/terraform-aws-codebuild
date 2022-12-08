@@ -437,8 +437,11 @@ resource "aws_codebuild_project" "default" {
       insecure_ssl        = secondary_source.value.insecure_ssl
       report_build_status = secondary_source.value.report_build_status
 
-      git_submodules_config {
-        fetch_submodules = secondary_source.value.fetch_submodules
+      dynamic "git_submodules_config" {
+        for_each = contains(["CODECOMMIT", "GITHUB", "GITHUB_ENTERPRISE"], secondary_sources.value.type) ? [true] : []
+        content {
+          fetch_submodules = secondary_sources.value.fetch_submodules
+        }
       }
     }
   }
