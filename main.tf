@@ -309,9 +309,9 @@ resource "aws_codebuild_project" "default" {
     content {
       combine_artifacts = "true"
       service_role      = join("", aws_iam_role.default.*.arn)
-      timeout_in_mins   = 20
+      timeout_in_mins   = 30
       restrictions {
-        # compute_types_allowed = ["BUILD_GENERAL1_SMALL"]
+        // todo, tune based on needs
         maximum_builds_allowed = 100
       }
     }
