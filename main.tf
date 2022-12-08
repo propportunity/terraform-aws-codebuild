@@ -302,18 +302,18 @@ resource "aws_codebuild_project" "default" {
     location = var.artifact_location
   }
 
-  
+
   dynamic "build_batch_config" {
-     for_each = var.concurrent_build_limit == 1 ? [] : [1]
-      content {
-        combine_artifacts = "true"
-        service_role      = join("", aws_iam_role.default.*.arn)
-        timeout_in_mins   = 20
-        restrictions {
-          # compute_types_allowed = ["BUILD_GENERAL1_SMALL"]
-          maximum_builds_allowed = 100
-        }
+    for_each = var.concurrent_build_limit == 1 ? [] : [1]
+    content {
+      combine_artifacts = "true"
+      service_role      = join("", aws_iam_role.default.*.arn)
+      timeout_in_mins   = 20
+      restrictions {
+        # compute_types_allowed = ["BUILD_GENERAL1_SMALL"]
+        maximum_builds_allowed = 100
       }
+    }
   }
 
   # Since the output type is restricted to S3 by the provider (this appears to
