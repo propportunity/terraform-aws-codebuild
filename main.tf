@@ -430,12 +430,12 @@ resource "aws_codebuild_project" "default" {
   dynamic "secondary_sources" {
     for_each = var.secondary_sources
     content {
-      git_clone_depth     = secondary_source.value.git_clone_depth
-      location            = secondary_source.value.location
-      source_identifier   = secondary_source.value.source_identifier
-      type                = secondary_source.value.type
-      insecure_ssl        = secondary_source.value.insecure_ssl
-      report_build_status = secondary_source.value.report_build_status
+      git_clone_depth     = secondary_sources.value.git_clone_depth
+      location            = secondary_sources.value.location
+      source_identifier   = secondary_sources.value.source_identifier
+      type                = secondary_sources.value.type
+      insecure_ssl        = secondary_sources.value.insecure_ssl
+      report_build_status = secondary_sources.value.report_build_status
 
       dynamic "git_submodules_config" {
         for_each = contains(["CODECOMMIT", "GITHUB", "GITHUB_ENTERPRISE"], secondary_sources.value.type) ? [true] : []
